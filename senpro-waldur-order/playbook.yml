@@ -1,0 +1,21 @@
+- name: SENPro Waldur Order (create)
+  hosts: localhost
+  connection: local
+  become: false
+  gather_facts: false
+
+  vars:
+    adapter_base_url: "{{ AdapterBaseUrl }}"
+    adapter_token: "{{ AdapterToken }}"
+    cluster: "{{ Cluster }}"
+    end_time: "{{ EndTime }}"
+    co_id: "{{ CO }}"
+    project_name: "{{ ProjectName }}"
+    src_tags: "{{ Tags | default('{}') | from_yaml if (Tags is string) else (Tags | default({})) }}"
+    enable_s3: "{{ EnableS3 | default(false) | bool }}"
+    enable_archive: "{{ EnableArchive | default(false) | bool }}"
+    # where we persist the cross-id on the VM
+    cross_id_file: "/opt/waldur/resource_uuid"
+
+  roles:
+    - role: order
