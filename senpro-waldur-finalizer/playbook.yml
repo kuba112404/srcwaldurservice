@@ -1,0 +1,26 @@
+- name: SENPro Waldur Finalizer (terminate)
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    adapter_base_url: "{{ AdapterBaseUrl }}"
+    adapter_token: "{{ AdapterToken }}"
+    cross_id_file: "/opt/waldur/resource_uuid"
+
+  tasks:
+    - name: Read Waldur UUID (if exists)
+      ansible.builtin.slurp:
+        path: "{{ cross_id_file }}"
+      register: uuid_file
+      failed_when: false
+
+    - name: Terminate via Adapter (idempotent)
+      ansible.builtin.uri:
+        url: "{{ adapter_base_url | trim('/') }}/terminate?uuid={{ (uuid_file.content | b64decode | trim) }}"
+        method: POST
+        headers:
+          Authorization: "Bearer {{ adapter_token }}"
+          Accept: "application/json"
+        status_code: [200,204,404]   # 404 -> already gone
+      when: uuid_file is defined and uuid_file.content is defined
+
