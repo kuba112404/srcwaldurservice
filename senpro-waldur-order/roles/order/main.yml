@@ -1,0 +1,63 @@
+- name: Ensure storage dir exists
+  ansible.builtin.file:
+    path: "{{ cross_id_file | dirname }}"
+    state: directory
+    mode: "0755"
+
+- name: Build order body for Adapter
+  ansible.builtin.set_fact:
+    order_body:
+      co_id: "{{ co_id }}"
+      project: { name: "{{ project_name }}" }
+      cluster: "{{ cluster }}"
+      end_time: "{{ end_time }}"
+      serviceAccount: true
+      tags: "{{ src_tags }}"
+      storage:
+        s3: "{{ enable_s3 }}"
+        archive: "{{ enable_archive }}"
+
+- name: Create Waldur resource via Adapter
+  ansible.builtin.uri:
+    url: "{{ adapter_base_url | trim('/') }}/create"
+    method: POST
+    headers:
+      Authorization: "Bearer {{ adapter_token }}"
+      Content-Type: "application/json"
+    body_format: json
+    body: "{{ order_body }}"
+    return_content: true
+    status_code: [200,201]
+  register: create_result
+
+# Accept either {"waldur_resource_uuid":"..."} or {"uuid":"..."} or plain text UUID
+- name: Extract Waldur UUID
+  ansible.builtin.set_fact:
+    waldur_uuid: >-
+      {{ (create_result.json.waldur_resource_uuid
+          | default(create_result.json.uuid)
+          | default(create_result.content)) | trim }}
+
+- name: Persist Waldur UUID on VM
+  ansible.builtin.copy:
+    content: "{{ waldur_uuid }}\n"
+    dest: "{{ cross_id_file }}"
+    mode: "0644"
+
+- name: First pull to get endpoints (optional)
+  ansible.builtin.uri:
+    url: "{{ adapter_base_url | trim('/') }}/pull?uuid={{ waldur_uuid }}"
+    method: GET
+    headers:
+      Authorization: "Bearer {{ adapter_token }}"
+      Accept: "application/json"
+    return_content: true
+    status_code: [200]
+  register: pull_result
+  failed_when: false
+
+- name: Export outputs to SRC (waldur_resource_uuid, endpoints)
+  ansible.builtin.set_stats:
+    data:
+      waldur_resource_uuid: "{{ waldur_uuid }}"
+      waldur_endpoints: "{{ pull_result.json.endpoints | default({}) }}"
